@@ -1,0 +1,83 @@
+#include <Arduino.h>
+#include "HX711.h"
+#include "soc/rtc.h"
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // set the LCD address to 0x3F for a 16 chars and 2 line display
+
+// HX711 circuit wiring
+const int LOADCELL_DOUT_PIN = 16;
+const int LOADCELL_SCK_PIN = 4;
+const int BUTTON_PIN = 5; // Push button pin
+const unsigned long DEBOUNCE_DELAY = 50; // Debounce delay in milliseconds
+
+volatile bool buttonPressed = false;
+unsigned long lastDebounceTime = 0;
+
+HX711 scale;
+
+void setup() {
+  Serial.begin(115200);
+  rtc_cpu_freq_config_t config;
+  rtc_clk_cpu_freq_get_config(&config);
+  rtc_clk_cpu_freq_to_config(RTC_CPU_FREQ_80M, &config);
+  rtc_clk_cpu_freq_set_config_fast(&config);
+ // Serial.println("HX711 Demo");
+
+  Serial.println("Initializing the scale");
+  lcd.begin();
+  lcd.clear();
+  lcd.backlight();      // Make sure backlight is on
+
+  // Print a message on both lines of the LCD.
+  lcd.setCursor(0, 0);   //Set cursor to character 2 on line 0
+  lcd.print("ANTZ Egg Module!");
+
+  delay(1000);
+  scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  scale.set_scale(1841);
+  //scale.set_scale(1841);                      // this value is obtained by calibrating the scale with known weights; see the README for details
+  scale.tare();               // reset the scale to 0
+  lcd.setCursor(0, 1);   //Set cursor to character 2 on line 0
+  lcd.print("Tare To 0");
+  delay(1000);
+  lcd.clear();
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP); // Set button pin as input with internal pull-up resistor
+  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING); // Attach interrupt to the button pin
+}
+
+void loop() {
+ // Serial.print("one reading:\t");
+ // Serial.print(scale.get_units(), 1);
+ // Serial.print("\t| average:\t");
+  lcd.setCursor(0, 0);   //Set cursor to character 2 on line 0
+  lcd.print("Weight: " + String(scale.get_units(10), 5));
+  delay(100); // Delay for LCD stability
+
+  if (buttonPressed) {
+    tare(); // Call tare function if button is pressed
+    buttonPressed = false; // Reset flag
+  }
+
+  scale.power_down();             // put the ADC in sleep mode
+  delay(500);
+  scale.power_up();
+}
+
+void tare() {
+  scale.tare(); // Reset the scale to zero
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Tare To 0");
+  delay(1000);
+  lcd.clear();
+}
+
+void buttonISR() {
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastDebounceTime >= DEBOUNCE_DELAY) {
+    buttonPressed = true;
+  }
+  lastDebounceTime = currentMillis;
+}
