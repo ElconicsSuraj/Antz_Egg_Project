@@ -1,0 +1,120 @@
+#include <Arduino.h>
+#include "HX711.h"
+#include "soc/rtc.h"
+#include <LiquidCrystal_I2C.h>
+int previousLength = 0; // Variable to store the length of the previous data
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // set the LCD address to 0x3F for a 16 chars and 2 line display
+
+// HX711 circuit wiring
+const int LOADCELL_DOUT_PIN = 16;
+const int LOADCELL_SCK_PIN = 4;
+const int BUTTON_PIN = 5; // Push button pin
+const unsigned long DEBOUNCE_DELAY = 50; // Debounce delay in milliseconds
+
+volatile bool buttonPressed = false;
+unsigned long lastDebounceTime = 0;
+
+HX711 scale;
+
+void setup() {
+  Serial.begin(9600);
+  rtc_cpu_freq_config_t config;
+  rtc_clk_cpu_freq_get_config(&config);
+  rtc_clk_cpu_freq_to_config(RTC_CPU_FREQ_80M, &config);
+  rtc_clk_cpu_freq_set_config_fast(&config);
+  Serial.println("HX711 Demo");
+
+  Serial.println("Initializing the scale");
+  lcd.begin();
+  lcd.clear();
+  lcd.backlight();      // Make sure backlight is on
+
+  // Print a message on both lines of the LCD.
+  lcd.setCursor(0, 0);   //Set cursor to character 2 on line 0
+  lcd.print("ANTZ Egg Module!");
+
+  delay(1000);
+  scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  scale.set_scale(1841);
+  //scale.set_scale(1841);                      // this value is obtained by calibrating the scale with known weights; see the README for details
+  scale.tare();               // reset the scale to 0
+  lcd.setCursor(0, 1);   //Set cursor to character 2 on line 0
+  lcd.print("Tare To 0");
+  delay(1000);
+  lcd.clear();
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP); // Set button pin as input with internal pull-up resistor
+  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING); // Attach interrupt to the button pin
+}
+
+void loop() {
+  Serial.flush();
+  Serial.print("one reading:\t");
+  Serial.print(scale.get_units(), 1);
+  Serial.print("\t| average:\t");
+  lcd.setCursor(0, 0);   //Set cursor to character 2 on line 0
+  lcd.print("Weight: " + String(scale.get_units(10), 5));
+ //
+ lcd.setCursor(0, 1);
+  //lcd.print("Chiranjeevi");
+  delay(1000); // Delay for LCD stability
+
+    // Check if data is available to read from the Serial port
+  if(Serial.available() > 0) {
+    // Read the incoming data until newline character '\n' is received
+    String dataString = Serial.readStringUntil('\n');
+
+    lcd.clear(); // Clear the LCD display
+    
+    // Check if the length of the new data is different from the previous one
+    if (dataString.length() != previousLength) {
+      // Update the previousLength variable
+      previousLength = dataString.length();
+    }
+
+    lcd.setCursor(0, 1);   // Set cursor to character 2 on line 0
+   // lcd.print("Data ");
+    lcd.print(dataString);
+    delay(100);
+    Serial.flush();
+    loop();
+    
+
+  }
+
+  if (buttonPressed) {
+    tare(); // Call tare function if button is pressed
+    buttonPressed = false; // Reset flag
+  }
+
+  scale.power_down();             // put the ADC in sleep mode
+  delay(500);
+  scale.power_up();
+}
+
+void tare() {
+  scale.tare(); // Reset the scale to zero
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Tare To 0");
+  delay(1000);
+  lcd.clear();
+}
+
+void buttonISR() {
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastDebounceTime >= DEBOUNCE_DELAY) {
+    buttonPressed = true;
+  }
+  lastDebounceTime = currentMillis;
+}
+
+
+
+
+
+
+
+
+
+
