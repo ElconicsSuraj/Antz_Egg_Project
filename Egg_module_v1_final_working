@@ -1,0 +1,165 @@
+#include <Arduino.h>
+#include "HX711.h"
+#include "soc/rtc.h"
+#include <LiquidCrystal_I2C.h>
+#include <freertos/task.h>
+
+HX711 scale;
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // set the LCD address to 0x27 for a 16 chars and 2 line display
+
+const int LOADCELL_DOUT_PIN = 16;
+const int LOADCELL_SCK_PIN = 4;
+const int BUTTON_PIN = 5;
+const unsigned long DEBOUNCE_DELAY = 50;
+
+volatile bool buttonPressed = false;
+unsigned long lastDebounceTime = 0;
+
+String currentLine2 = ""; // Track the current characters on line 2 of the LCD
+
+void Task1(void *pvParameters);
+void Task2(void *pvParameters);
+
+TaskHandle_t Task1Handle = NULL;
+TaskHandle_t Task2Handle = NULL;
+
+void setup() {
+  Serial.begin(9600);
+
+  xTaskCreatePinnedToCore(
+    Task1,
+    "Task1",
+    5000,
+    NULL,
+    2,
+    &Task1Handle,
+    0 // Run on core 0
+  );
+
+  xTaskCreatePinnedToCore(
+    Task2,
+    "Task2",
+    5000,
+    NULL,
+    2,
+    &Task2Handle,
+    1 // Run on core 1
+  );
+}
+
+void loop() {
+  // Empty, because we are using FreeRTOS tasks
+}
+
+void Task1(void *pvParameters) {
+  (void) pvParameters;
+
+  rtc_cpu_freq_config_t config;
+  rtc_clk_cpu_freq_get_config(&config);
+  rtc_clk_cpu_freq_to_config(RTC_CPU_FREQ_80M, &config);
+  rtc_clk_cpu_freq_set_config_fast(&config);
+  Serial.println("HX711 Demo");
+
+  Serial.println("Initializing the scale");
+  lcd.begin();
+  lcd.clear();
+  lcd.backlight();
+
+  lcd.setCursor(0, 0);
+  lcd.print("ANTZ Egg Module!");
+
+  scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  scale.set_scale(1841);
+  scale.tare();
+  lcd.setCursor(0, 1);
+  lcd.print("Tare To 0");
+  delay(1000);
+  lcd.clear();
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
+
+  while (1) {
+    Serial.println("Task 1 is running");
+
+    if (buttonPressed) {
+      tare();
+      buttonPressed = false;
+    }
+
+    scale.power_down();
+    delay(500);
+    scale.power_up();
+
+    double weight = scale.get_units(10); // Get weight in double floating point
+    Serial.print("Weight:\t");
+    Serial.println(weight, 2); // Print weight with 2 decimal places
+    lcd.setCursor(0, 0);
+    lcd.print("Weight: " + String(weight, 2)); // Display weight on the first row
+
+    // Move cursor to the start of line 2 and print the current line 2 content
+    lcd.setCursor(0, 1);
+    lcd.print(currentLine2);
+
+    delay(1000);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+}
+
+void Task2(void *pvParameters) {
+  (void) pvParameters;
+
+  pinMode(2, OUTPUT); // Set pin 2 as an output
+  
+  Serial.println("Task 2 is created"); // Debugging statement to check if Task 2 is created
+  
+  while (1) {
+    Serial.println("Task 2 is running"); // Debugging statement to check if Task 2 is running
+    
+    if (Serial.available()) {
+      Serial.println("Serial data available"); // Debugging statement to check if serial data is available
+
+      // Set pin 2 high
+      digitalWrite(2, HIGH);
+
+      String newData = ""; // Track the new data received from serial
+      
+      while (Serial.available()) {
+        char incomingChar = Serial.read();
+        newData += incomingChar;
+        Serial.print(incomingChar);
+      }
+      Serial.println(); // Print new line after receiving data
+
+      currentLine2 = newData; // Update the current content of line 2
+
+      // Move cursor to the start of line 2 and print the new data
+      lcd.setCursor(0, 1);
+      lcd.print(currentLine2);
+
+      // Set pin 2 low after processing data
+      digitalWrite(2, LOW);
+    } else {
+      Serial.println("No serial data available"); // Debugging statement to check if serial data is not available
+    }
+
+    vTaskDelay(100 / portTICK_PERIOD_MS); // Delay for 100 milliseconds
+  }
+}
+
+void tare() {
+  scale.tare();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Tare To 0");
+  delay(1000);
+  lcd.clear();
+}
+
+void buttonISR() {
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastDebounceTime >= DEBOUNCE_DELAY) {
+    buttonPressed = true;
+  }
+  lastDebounceTime = currentMillis;
+}
