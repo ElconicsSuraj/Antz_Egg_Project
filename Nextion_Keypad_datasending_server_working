@@ -6,7 +6,7 @@
 #include <ArduinoJson.h>
 
 // Declare your Nextion button objects for page 1
-NexButton b0 = NexButton(0, 1, "b0");
+NexButton b0 = NexButton(0, 1, "b0"); // page number , id , object name
 NexButton b1 = NexButton(0, 2, "b1");
 NexButton b2 = NexButton(0, 3, "b2");
 NexButton b3 = NexButton(0, 4, "b3");
