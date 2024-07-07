@@ -1,0 +1,494 @@
+#include <Arduino.h>
+#include "HX711.h"
+#include <freertos/task.h>
+#include <Nextion.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <WiFiUdp.h>
+#include <NTPClient.h>
+#include <ArduinoJson.h>
+
+// HX711 load cell
+HX711 scale;
+
+// Nextion display
+NexText t0 = NexText(1, 3, "a0");
+NexText t1 = NexText(1, 4, "a1");
+NexText t2 = NexText(1, 5, "a2");
+NexButton b1_1 = NexButton(1, 6, "b1"); // Tare button on page 1 with id 6 and object name b1
+
+// Nextion button objects for page 2
+NexButton b0 = NexButton(2, 1, "b0");
+NexButton b1 = NexButton(2, 2, "b1");
+NexButton b2 = NexButton(2, 3, "b2");
+NexButton b3 = NexButton(2, 4, "b3");
+NexButton b4 = NexButton(2, 5, "b4");
+NexButton b5 = NexButton(2, 6, "b5");
+NexButton b6 = NexButton(2, 7, "b6");
+NexButton b7 = NexButton(2, 7, "b7");
+NexButton b8 = NexButton(2, 9, "b8");
+NexButton b9 = NexButton(2, 10, "b9");
+NexButton b10 = NexButton(2, 11, "b10");// OK Button
+NexButton b11 = NexButton(2, 14, "b11"); // backspace
+NexButton b12 = NexButton(2, 13, "b13"); // DELETE
+NexButton b13 = NexButton(2, 12, "b12");  // backslash
+
+
+// NexPage objects for page change tracking
+NexPage page0 = NexPage(0, 0, "page0");
+NexPage page1 = NexPage(1, 0, "page1");
+NexPage page2 = NexPage(2, 0, "page2");
+
+// Variable to track the current page
+int currentPage = 0; // Default to page 0
+
+// Initialize LED pin for example purposes
+const int ledPin = 2;
+const int LOADCELL_DOUT_PIN = 4;
+const int LOADCELL_SCK_PIN = 5;
+const int BUTTON_PIN = 15;
+const unsigned long DEBOUNCE_DELAY = 50;
+
+volatile bool buttonPressed = false;
+unsigned long lastDebounceTime = 0;
+
+// Variable to store the entered number
+String enteredNumber = "";
+double storedWeight = 0;
+String storedLength;
+String storedBreadth;
+
+// Task handles
+TaskHandle_t Task1Handle = NULL;
+TaskHandle_t Task2Handle = NULL;
+TaskHandle_t EnterNumberTaskHandle = NULL;
+TaskHandle_t SendDataTaskHandle = NULL;
+
+SemaphoreHandle_t lcdSemaphore;
+
+// Callback functions for button press events
+void b0PopCallback(void *ptr) {
+  enteredNumber += "1";
+  Serial.println("Button 1 pressed");
+}
+void b1PopCallback2(void *ptr) {
+  enteredNumber += "2";
+  Serial.println("Button 2 pressed");
+}
+void b2PopCallback(void *ptr) {
+  enteredNumber += "3";
+  Serial.println("Button 3 pressed");
+}
+void b3PopCallback(void *ptr) {
+  enteredNumber += "4";
+  Serial.println("Button 4 pressed");
+}
+void b4PopCallback(void *ptr) {
+  enteredNumber += "5";
+  Serial.println("Button 5 pressed");
+}
+void b5PopCallback(void *ptr) {
+  enteredNumber += "6";
+  Serial.println("Button 6 pressed");
+}
+void b6PopCallback(void *ptr) {
+  enteredNumber += "7";
+  Serial.println("Button 7 pressed");
+}
+void b7PopCallback(void *ptr) {
+  enteredNumber += "8";
+  Serial.println("Button 8 pressed");
+}
+void b8PopCallback(void *ptr) {
+  enteredNumber += "9";
+  Serial.println("Button 9 pressed");
+}
+void b9PopCallback(void *ptr) {
+  enteredNumber += "0";
+  Serial.println("Button 0 pressed");
+}
+void b10PopCallback(void *ptr) {  // OK Button
+  Serial.print("OK Button pressed, entered number: ");
+  Serial.println(enteredNumber);
+  xTaskNotifyGive(SendDataTaskHandle); // Notify the SendDataTask to run
+}
+void b11PopCallback(void *ptr) { // Backspace
+  if (enteredNumber.length() > 0) {
+    enteredNumber.remove(enteredNumber.length() - 1);
+    Serial.print("Backspace pressed, new number: ");
+    Serial.println(enteredNumber);
+  }
+}
+void b12PopCallback(void *ptr) { // Delete entered value
+  enteredNumber = "";
+  Serial.println("Delete pressed, entered number cleared");
+}
+void b13PopCallback(void *ptr) {
+  enteredNumber += "/";
+  Serial.println("Backslash added");
+}
+
+// Tare button callback function
+void b1_1PopCallback(void *ptr) {
+  Serial.println("Tare button pressed");
+  tare();
+}
+
+void b1PushCallback(void *ptr) {
+  Serial.println("Tare button pressed");
+  tare();
+}
+
+// Page change callback functions
+void page0ShowCallback(void *ptr) {
+  currentPage = 0;
+  Serial.println("Page 0 shown");
+}
+
+void page1ShowCallback(void *ptr) {
+  currentPage = 1;
+  Serial.println("Page 1 shown");
+}
+
+void page2ShowCallback(void *ptr) {
+  currentPage = 2;
+  Serial.println("Page 2 shown");
+}
+
+NexTouch *nex_listen_list[] = {
+  &page0, &page1, &page2,
+  &b1_1, &b0, &b1, &b2, &b3, &b4, &b5, &b6, &b7, &b8, &b9, &b10, &b11, &b12,&b13,
+  NULL
+};  // Array of Nextion touch objects
+
+// WiFi credentials
+const char* ssid = "Elconics";
+const char* password = "Elconics@123";
+
+// API endpoint
+const char* serverName = "https://app.antzsystems.com/api/v1/iot/update/egg/weight";
+
+// NTP client settings
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 0, 60000); // Update every minute
+
+String getFormattedDateTime() {
+  time_t rawTime = timeClient.getEpochTime();
+  struct tm *timeInfo;
+  char buffer[30];
+
+  timeInfo = gmtime(&rawTime); // Get the time in UTC
+  strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", timeInfo); // Format time as ISO 8601
+
+  return String(buffer);
+}
+
+void setup() {
+  Serial.begin(9600);
+  Serial2.begin(9600, SERIAL_8N1, 16, 17);  // RX pin 16, TX pin 17
+  Serial.println("Serial2 initialized");
+
+  // Initialize Nextion display
+  nexInit();
+
+  // Attach page change callbacks
+  page0.attachPush(page0ShowCallback);
+  page1.attachPush(page1ShowCallback);
+  page2.attachPush(page2ShowCallback);
+
+  // Attach tare button callback
+  b1_1.attachPop(b1_1PopCallback);
+//  b1_1.attachPush(b1_1PushCallback);
+
+  // Attach Nextion button callbacks for page 2
+  b0.attachPop(b0PopCallback);
+  b1.attachPop(b1PopCallback2);
+  b2.attachPop(b2PopCallback);
+  b3.attachPop(b3PopCallback);
+  b4.attachPop(b4PopCallback);
+  b5.attachPop(b5PopCallback);
+  b6.attachPop(b6PopCallback);
+  b7.attachPop(b7PopCallback);
+  b8.attachPop(b8PopCallback);
+  b9.attachPop(b9PopCallback);
+  b10.attachPop(b10PopCallback);
+  b11.attachPop(b11PopCallback);
+  b12.attachPop(b12PopCallback);
+  b13.attachPop(b13PopCallback);
+//  b13.attachPop(b14PopCallback);
+
+  lcdSemaphore = xSemaphoreCreateMutex();
+
+  // Initialize WiFi
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("Connected!");
+
+  // Initialize NTP client
+  timeClient.begin();
+  timeClient.update();
+
+  // Create FreeRTOS tasks
+  xTaskCreatePinnedToCore(
+    Task1,
+    "Task1",
+    8192,  // Increased stack size
+    NULL,
+    1,
+    &Task1Handle,
+    0 // Run on core 0
+  );
+
+  xTaskCreatePinnedToCore(
+    Task2,
+    "Task2",
+    8192,  // Increased stack size
+    NULL,
+    2,
+    &Task2Handle,
+    1 // Run on core 1
+  );
+
+  xTaskCreatePinnedToCore(
+    EnterNumberTask,    // Task function
+    "EnterNumberTask",  // Name of the task
+    4096,               // Increased stack size
+    NULL,               // Task input parameter
+    1,                  // Priority of the task
+    &EnterNumberTaskHandle, // Task handle
+    0);                 // Core to run the task
+
+  xTaskCreatePinnedToCore(
+    SendDataTask,       // Task function
+    "SendDataTask",     // Name of the task
+    8000,               // Increased stack size
+    NULL,               // Task input parameter
+    1,                  // Priority of the task
+    &SendDataTaskHandle,// Task handle
+    1);                 // Core to run the task
+
+  // Suspend EnterNumberTask initially
+  vTaskSuspend(EnterNumberTaskHandle);
+}
+
+void loop() {
+  // Listen for touch events
+  nexLoop(nex_listen_list);
+}
+
+void Task1(void *pvParameters) {
+  (void) pvParameters;
+
+  // Initialize the scale
+  Serial.println("Initializing the scale");
+  scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  scale.set_scale(1990);
+  scale.tare();
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
+
+  while (1) {
+    Serial.println("Task 1 is running");
+    nexLoop(nex_listen_list);  // Check for any button presses on the Nextion display
+    if (buttonPressed) {
+      tare();
+      Serial.println("Button Pressed Tare");
+      buttonPressed = false;
+    }
+
+    scale.power_down();
+    delay(500);
+    scale.power_up();
+
+    double weight = scale.get_units(10); // Get weight in double floating point
+    Serial.print("Weight:\t");
+    Serial.println(weight, 0); // Print weight with 2 decimal places
+
+    if (xSemaphoreTake(lcdSemaphore, portMAX_DELAY)) {
+      if (weight < 3.0) {
+        weight = 0;
+      }
+
+      t2.setText(String(weight, 0).c_str());
+
+      xSemaphoreGive(lcdSemaphore);
+    }
+
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+}
+
+void Task2(void *pvParameters) {
+  (void) pvParameters;
+
+  pinMode(2, OUTPUT); // Set pin 2 as an output
+
+  Serial.println("Task 2 is created"); // Debugging statement to check if Task 2 is created
+
+  while (1) {
+    // Use ulTaskNotifyTake to wait until Task2 is notified to run
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    Serial.println("Task 2 is running"); // Debugging statement to check if Task 2 is running
+
+    if (Serial.available()) {
+      Serial.println("Serial data available"); // Debugging statement to check if serial data is available
+
+      // Set pin 2 high
+      digitalWrite(2, HIGH);
+
+      String newData = ""; // Track the new data received from serial
+
+      while (Serial.available()) {
+        char incomingChar = Serial.read();
+        newData += incomingChar;
+        delay(10);  // Give some time for all characters to arrive
+      }
+
+      Serial.println("Received: " + newData); // Debugging print
+
+      // Ensure newData fits within the display line limit
+      if (newData.length() > 20) {
+        newData = newData.substring(0, 20);
+      }
+
+      // Parse the received data
+      int length = 0;
+      int breadth = 0;
+
+      // Find the positions of "L" and "B" keywords
+      int lengthStart = newData.indexOf('L') + 2;
+      int lengthEnd = newData.indexOf('B') - 1;
+      int breadthStart = newData.indexOf('B') + 2;
+
+      if (lengthStart > 1 && lengthEnd > lengthStart && breadthStart > lengthEnd) {
+        // Extract substrings for length and breadth
+        String lengthStr = newData.substring(lengthStart, lengthEnd);
+        storedLength = lengthStr;
+        String breadthStr = newData.substring(breadthStart);
+        storedBreadth = breadthStr;
+
+        // Convert the substrings to integers
+        length = lengthStr.toInt();
+        breadth = breadthStr.toInt();
+      }
+
+      // Print the results
+      Serial.print("Length: ");
+      Serial.println(length);
+      Serial.print("Breadth: ");
+      Serial.println(breadth);
+
+      if (xSemaphoreTake(lcdSemaphore, portMAX_DELAY)) {
+        //if (currentPage == 1) { // Ensure the text is set only on page 1
+          t0.setText(String(length).c_str());
+          t1.setText(String(breadth).c_str());
+        //}
+        xSemaphoreGive(lcdSemaphore);
+      }
+
+      // Set pin 2 low after processing data
+      digitalWrite(2, LOW);
+    }
+  }
+}
+
+void EnterNumberTask(void * parameter) {
+  while (true) {
+    // Wait for notification from main loop
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    Serial.println("EnterNumberTask is running");
+
+    // Store the current weight in storedWeight
+    storedWeight = scale.get_units(10);
+    Serial.print("Stored Weight: ");
+    Serial.println(storedWeight);
+
+    // Simulate some work by delaying
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+}
+
+void SendDataTask(void * parameter) {
+  while (true) {
+    // Wait for notification from the EnterNumberTask
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    if (WiFi.status() == WL_CONNECTED) {
+      HTTPClient http;
+
+      http.begin(serverName);
+      http.addHeader("Content-Type", "application/json");
+
+      // Prepare JSON payload
+      StaticJsonDocument<200> doc;
+      doc["egg_code"] = enteredNumber; // Use entered number as egg_code
+
+      String formattedDate = getFormattedDateTime(); // Get the current time from NTP
+
+      JsonObject weight = doc.createNestedObject("weight");
+      weight["value"] = storedWeight; // Use stored weight value
+      weight["event_date"] = formattedDate; // Use current time from NTP server
+
+      JsonObject length = doc.createNestedObject("length");
+      length["value"] = storedLength; // Use stored length value
+      length["event_date"] = formattedDate; // Use current time from NTP server
+
+      JsonObject width = doc.createNestedObject("width");
+      width["value"] = storedBreadth; // Use stored breadth value
+      width["event_date"] = formattedDate; // Use current time from NTP server
+
+      String requestBody;
+      serializeJson(doc, requestBody);
+
+      Serial.print("Sending JSON Payload: ");
+      Serial.println(requestBody); // Print the JSON payload
+
+      int httpResponseCode = http.POST(requestBody);
+
+      if (httpResponseCode > 0) {
+        String response = http.getString();
+        Serial.println(httpResponseCode);
+        Serial.println(response);
+      } else {
+        Serial.print("Error on sending POST: ");
+        Serial.println(httpResponseCode);
+      }
+
+      http.end();
+    } else {
+      Serial.println("WiFi Disconnected");
+    }
+
+    enteredNumber = ""; // Reset entered number after sending
+  }
+}
+
+void tare() {
+  if (xSemaphoreTake(lcdSemaphore, portMAX_DELAY)) {
+    scale.tare();
+    t2.setText("Tare");
+    delay(1000);
+    xSemaphoreGive(lcdSemaphore);
+  }
+}
+
+void buttonISR() {
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastDebounceTime >= DEBOUNCE_DELAY) {
+    buttonPressed = true;
+  }
+  lastDebounceTime = currentMillis;
+}
+
+// ISR to notify Task2 when serial data is available
+void serialEvent() {
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+  vTaskNotifyGiveFromISR(Task2Handle, &xHigherPriorityTaskWoken);
+  portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
