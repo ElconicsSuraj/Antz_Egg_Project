@@ -1,0 +1,243 @@
+#include <Arduino.h>
+#include "HX711.h"
+#include <freertos/task.h>
+#include <Nextion.h>
+
+// HX711 load cell
+HX711 scale;
+
+// Nextion display
+NexText t0 = NexText(1, 3, "a0");
+NexText t1 = NexText(1, 4, "a1");
+NexText t2 = NexText(1, 5, "a2");
+NexButton b1_1 = NexButton(1, 6, "b1"); // Tare button on page 1 with id 6 and object name b1
+
+// NexPage objects for page change tracking
+NexPage page0 = NexPage(0, 0, "page0");
+NexPage page1 = NexPage(1, 0, "page1");
+
+// Variable to track the current page
+int currentPage = 0; // Default to page 0
+
+const int ledPin = 2;
+const int LOADCELL_DOUT_PIN = 4;
+const int LOADCELL_SCK_PIN = 5;
+const int BUTTON_PIN = 15;
+const unsigned long DEBOUNCE_DELAY = 50;
+
+volatile bool buttonPressed = false;
+unsigned long lastDebounceTime = 0;
+
+double storedWeight = 0;
+String storedLength;
+String storedBreadth;
+
+TaskHandle_t Task1Handle = NULL;
+TaskHandle_t Task2Handle = NULL;
+
+SemaphoreHandle_t lcdSemaphore;
+
+// Tare button callback function for Nextion display
+void b1_1PopCallback(void *ptr) {
+  tare();
+}
+
+// Page change callback functions
+void page0ShowCallback(void *ptr) {
+  currentPage = 0;
+}
+
+void page1ShowCallback(void *ptr) {
+  currentPage = 1;
+}
+
+NexTouch *nex_listen_list[] = {
+  &page0, &page1,
+  &b1_1,
+  NULL
+};  // Array of Nextion touch objects
+
+void setup() {
+  Serial.begin(9600);
+  Serial2.begin(9600, SERIAL_8N1, 16, 17);  // RX pin 16, TX pin 17
+
+  // Initialize Nextion display
+  nexInit();
+
+  // Attach page change callbacks
+  page0.attachPush(page0ShowCallback);
+  page1.attachPush(page1ShowCallback);
+
+  // Attach tare button callback
+  b1_1.attachPop(b1_1PopCallback);
+
+  lcdSemaphore = xSemaphoreCreateMutex();
+
+  // Create FreeRTOS tasks
+  xTaskCreatePinnedToCore(
+    Task1,
+    "Task1",
+    8192,  // Increased stack size
+    NULL,
+    1,
+    &Task1Handle,
+    0 // Run on core 0
+  );
+
+  xTaskCreatePinnedToCore(
+    Task2,
+    "Task2",
+    8192,  // Increased stack size
+    NULL,
+    2,
+    &Task2Handle,
+    1 // Run on core 1
+  );
+}
+
+void loop() {
+  // Listen for touch events
+  nexLoop(nex_listen_list);
+}
+
+void Task1(void *pvParameters) {
+  (void) pvParameters;
+
+  // Initialize the scale
+  scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  scale.set_scale(1990); // Set the calibration factor
+  scale.tare(); // Reset the scale to zero
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
+
+  while (1) {
+    nexLoop(nex_listen_list);  // Check for any button presses on the Nextion display
+    if (buttonPressed) {
+      tare();
+      buttonPressed = false;
+    }
+
+    scale.power_down();
+    delay(500);
+    scale.power_up();
+
+    double weight = scale.get_units(10); // Get weight in double floating point
+
+    // Ensure negative zero is displayed as zero
+    if (weight == 0.0) {
+      weight = 0.0;
+    }
+
+    if (xSemaphoreTake(lcdSemaphore, portMAX_DELAY)) {
+      t2.setText(weight == 0.0 ? "0" : String(weight, 1).c_str()); // Display weight with 1 decimal place or "0"
+      xSemaphoreGive(lcdSemaphore);
+    }
+
+    vTaskDelay(1000 / portTICK_PERIOD_MS); // Yield to prevent watchdog reset
+  }
+}
+
+void Task2(void *pvParameters) {
+  (void) pvParameters;
+
+  pinMode(2, OUTPUT); // Set pin 2 as an output
+
+  while (1) {
+    // Use ulTaskNotifyTake to wait until Task2 is notified to run
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    if (Serial.available()) {
+      // Set pin 2 high
+      digitalWrite(2, HIGH);
+
+      String newData = ""; // Track the new data received from serial
+
+      while (Serial.available()) {
+        char incomingChar = Serial.read();
+        newData += incomingChar;
+        delay(10);  // Give some time for all characters to arrive
+      }
+
+      // Ensure newData fits within the display line limit
+      if (newData.length() > 20) {
+        newData = newData.substring(0, 20);
+      }
+
+      // Parse the received data
+      int length = 0;
+      int breadth = 0;
+
+      // Find the positions of "L" and "B" keywords
+      int lengthStart = newData.indexOf('L') + 2;
+      int lengthEnd = newData.indexOf('B') - 1;
+      int breadthStart = newData.indexOf('B') + 2;
+
+      if (lengthStart > 1 && lengthEnd > lengthStart && breadthStart > lengthEnd) {
+        // Extract substrings for length and breadth
+        String lengthStr = newData.substring(lengthStart, lengthEnd);
+        storedLength = lengthStr;
+        String breadthStr = newData.substring(breadthStart);
+        storedBreadth = breadthStr;
+
+        // Convert the substrings to integers
+        length = lengthStr.toInt();
+        breadth = breadthStr.toInt();
+      }
+
+      if (xSemaphoreTake(lcdSemaphore, portMAX_DELAY)) {
+        t0.setText(String(length).c_str());
+        t1.setText(String(breadth).c_str());
+        xSemaphoreGive(lcdSemaphore);
+      }
+
+      // Set pin 2 low after processing data
+      digitalWrite(2, LOW);
+    }
+
+    vTaskDelay(1000 / portTICK_PERIOD_MS); // Yield to prevent watchdog reset
+  }
+}
+
+// Variable to store the last time tare was called to avoid rapid successive tares
+unsigned long lastTareTime = 0;
+const unsigned long TARE_DELAY = 2000;  // 2 seconds debounce time for tare
+
+void tare() {
+  // Get the current time
+  unsigned long currentMillis = millis();
+
+  // Check if enough time has passed since the last tare operation
+  if (currentMillis - lastTareTime >= TARE_DELAY) {
+    // Take the semaphore to ensure exclusive access to the scale and display
+    if (xSemaphoreTake(lcdSemaphore, portMAX_DELAY)) {
+      // Perform the tare operation
+      scale.tare();
+      delay(1000);  // Allow time for the scale to settle after taring
+
+      // Update the display (if necessary)
+      t2.setText("Tare");
+
+      // Release the semaphore
+      xSemaphoreGive(lcdSemaphore);
+
+      // Update the last tare time
+      lastTareTime = currentMillis;
+    }
+  }
+}
+
+void buttonISR() {
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastDebounceTime >= DEBOUNCE_DELAY) {
+    buttonPressed = true;
+  }
+  lastDebounceTime = currentMillis;
+}
+
+// ISR to notify Task2 when serial data is available
+void serialEvent() {
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+  vTaskNotifyGiveFromISR(Task2Handle, &xHigherPriorityTaskWoken);
+  portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
