@@ -16,6 +16,7 @@ HX711 scale;
 NexText t0 = NexText(1, 3, "a0");
 NexText t1 = NexText(1, 4, "a1");
 NexText t2 = NexText(1, 5, "a2");
+NexText t9 = NexText(3, 26, "t9");
 NexButton b1_1 = NexButton(1, 6, "b1"); // Tare button on page 1 with id 6 and object name b1
 
 // Nextion button objects for page 2
@@ -56,7 +57,7 @@ unsigned long lastDebounceTime = 0;
 
 // Variable to store the entered number
 String enteredNumber = "";
-double storedWeight = 0;
+double storedWeight;
 String storedLength;
 String storedBreadth;
 
@@ -145,6 +146,7 @@ void b11PopCallback(void *ptr) { // Backspace
 }
 void b12PopCallback(void *ptr) { // Delete entered value
   enteredNumber = "";
+  t9.setText("");
    vTaskResume(Task1Handle);
   vTaskResume(Task2Handle);
   Serial.println("Delete pressed, entered number cleared");
@@ -247,16 +249,7 @@ void setup() {
 
   // WiFi Manager Accesspoint and station mode
   WiFiManager manager;
- //   bool isConnected();
-//    if (is Connected ==0)
-//    {
-//    Serial.println("Device is in Access Point mode, navigating to page 4");
-//    page4.show(); // Assuming page4 is your AP mode page
-//      }
-//      else 
-//      {
-//        
-//        }
+
   bool success = manager.autoConnect("Config Egg Module");
 
   
@@ -358,7 +351,7 @@ void Task1(void *pvParameters) {
     double weight = scale.get_units(10); // Get weight in double floating point
     Serial.print("Weight:\t");
     Serial.println(weight, 0); // Print weight with 2 decimal places
-
+    storedWeight=weight;
     if (xSemaphoreTake(lcdSemaphore, portMAX_DELAY)) {
       if (weight < 3.0) {
         weight = 0;
@@ -454,7 +447,7 @@ void EnterNumberTask(void * parameter) {
     Serial.println("EnterNumberTask is running");
 
     // Store the current weight in storedWeight
-    storedWeight = scale.get_units(10);
+    //storedWeight = scale.get_units(10);
     Serial.print("Stored Weight: ");
     Serial.println(storedWeight);
 
@@ -504,9 +497,15 @@ void SendDataTask(void * parameter) {
         String response = http.getString();
         Serial.println(httpResponseCode);
         Serial.println(response);
+        String message = "Success ID:" + String(enteredNumber);
+         t9.setText(message.c_str());
+          
+
       } else {
         Serial.print("Error on sending POST: ");
         Serial.println(httpResponseCode);
+                String message = "Fail ID " + String(enteredNumber);
+         t9.setText(message.c_str());
       }
 
       http.end();
