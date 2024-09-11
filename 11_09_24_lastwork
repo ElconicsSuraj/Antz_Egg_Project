@@ -69,9 +69,6 @@ TaskHandle_t SendDataTaskHandle = NULL;
 
 SemaphoreHandle_t lcdSemaphore;
 
-void page_3();
-void page_0();
-
 // Callback functions for button press events
 void b0PopCallback(void *ptr) {
   enteredNumber += "1";
@@ -251,8 +248,12 @@ void setup() {
   lcdSemaphore = xSemaphoreCreateMutex();
 
   // WiFi Manager Accesspoint and station mode
-  page_3();
   WiFiManager manager;
+
+
+  // WiFi Manager Accesspoint and station mode
+  page_3();
+//  WiFiManager manager;
 
   bool success = manager.autoConnect("Config Egg Module");
 
@@ -267,6 +268,12 @@ void setup() {
      Serial.println("Device is in Station mode, navigating to page 5");
  
   }
+
+//  bool success = manager.autoConnect("Config Egg Module");
+
+  
+
+
 
 //  // Check if in Access Point mode or Station mode
 //  if (WiFi.getMode() == WIFI_MODE_AP) {
@@ -420,11 +427,13 @@ void Task2(void *pvParameters) {
         String lengthStr = newData.substring(lengthStart, lengthEnd);
         storedLength = lengthStr;
         String breadthStr = newData.substring(breadthStart);
-        storedBreadth = breadthStr;
+        //storedBreadth = breadthStr;
 
         // Convert the substrings to integers
         length = lengthStr.toInt();
         breadth = breadthStr.toInt();
+        storedBreadth=breadth;
+        storedLength = length;
       }
 
       // Print the results
@@ -547,17 +556,6 @@ void serialEvent() {
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
-
-void page_3()
-{
-    // Switch to Page 5 initially using direct command
-    Serial2.print("page 3");
-    Serial2.write(0xFF); // End of command
-    Serial2.write(0xFF); // End of command
-    Serial2.write(0xFF); // End of command
-
-    Serial.println("Switched to Page 5");
-}
 void page_0()
 {
 
@@ -570,3 +568,14 @@ void page_0()
     Serial.println("Switched to Page 0");
 }
 
+void page_3()
+{
+
+    // Switch to Page 0 using direct command
+    Serial2.print("page 3");
+    Serial2.write(0xFF); // End of command
+    Serial2.write(0xFF); // End of command
+    Serial2.write(0xFF); // End of command
+
+    Serial.println("Switched to Page 3");
+}
