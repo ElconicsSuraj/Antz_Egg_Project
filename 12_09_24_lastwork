@@ -36,11 +36,11 @@ NexButton b12 = NexButton(2, 14, "b13"); // DELETE
 NexButton b13 = NexButton(2, 13, "b12");  // backslash
 
 // NexPage objects for page change tracking
-NexPage page0 = NexPage(0, 0, "page0");
-NexPage page1 = NexPage(1, 0, "page1");
-NexPage page2 = NexPage(2, 0, "page2");
-NexPage page4 = NexPage(4, 0, "page4"); // Page 4 for AP mode
-NexPage page5 = NexPage(5, 0, "page5"); // Page 5 for Station mode
+//NexPage page0 = NexPage(0, 0, "page0");
+//NexPage page1 = NexPage(1, 0, "page1");
+//NexPage page2 = NexPage(2, 0, "page2");
+//NexPage page4 = NexPage(4, 0, "page4"); // Page 4 for AP mode
+//NexPage page5 = NexPage(5, 0, "page5"); // Page 5 for Station mode
 
 // Variable to track the current page
 int currentPage = 0; // Default to page 0
@@ -72,67 +72,67 @@ SemaphoreHandle_t lcdSemaphore;
 // Callback functions for button press events
 void b0PopCallback(void *ptr) {
   enteredNumber += "1";
-  Serial.println("Button 1 pressed");
+  // // serial.println("Button 1 pressed");
    vTaskSuspend(Task1Handle);
   vTaskSuspend(Task2Handle);
 }
 void b1PopCallback2(void *ptr) {
   enteredNumber += "2";
-  Serial.println("Button 2 pressed");
+  // serial.println("Button 2 pressed");
    vTaskSuspend(Task1Handle);
   vTaskSuspend(Task2Handle);
 }
 void b2PopCallback(void *ptr) {
   enteredNumber += "3";
-  Serial.println("Button 3 pressed");
+  // serial.println("Button 3 pressed");
    vTaskSuspend(Task1Handle);
   vTaskSuspend(Task2Handle);
 }
 void b3PopCallback(void *ptr) {
   enteredNumber += "4";
-  Serial.println("Button 4 pressed");
+  // serial.println("Button 4 pressed");
    vTaskSuspend(Task1Handle);
   vTaskSuspend(Task2Handle);
 }
 void b4PopCallback(void *ptr) {
   enteredNumber += "5";
-  Serial.println("Button 5 pressed");
+  // serial.println("Button 5 pressed");
    vTaskSuspend(Task1Handle);
   vTaskSuspend(Task2Handle);
 }
 void b5PopCallback(void *ptr) {
   enteredNumber += "6";
-  Serial.println("Button 6 pressed");
+  // serial.println("Button 6 pressed");
    vTaskSuspend(Task1Handle);
   vTaskSuspend(Task2Handle);
 }
 void b6PopCallback(void *ptr) {
   enteredNumber += "7";
-  Serial.println("Button 7 pressed");
+  // serial.println("Button 7 pressed");
    vTaskSuspend(Task1Handle);
   vTaskSuspend(Task2Handle);
 }
 void b7PopCallback(void *ptr) {
   enteredNumber += "8";
-  Serial.println("Button 8 pressed");
+  // serial.println("Button 8 pressed");
    vTaskSuspend(Task1Handle);
   vTaskSuspend(Task2Handle);
 }
 void b8PopCallback(void *ptr) {
   enteredNumber += "9";
-  Serial.println("Button 9 pressed");
+  // serial.println("Button 9 pressed");
    vTaskSuspend(Task1Handle);
   vTaskSuspend(Task2Handle);
 }
 void b9PopCallback(void *ptr) {
   enteredNumber += "0";
-  Serial.println("Button 0 pressed");
+  // serial.println("Button 0 pressed");
    vTaskSuspend(Task1Handle);
   vTaskSuspend(Task2Handle);
 }
 void b10PopCallback(void *ptr) {  // OK Button
-  Serial.print("OK Button pressed, entered number: ");
-  Serial.println(enteredNumber);
+  // serial.print("OK Button pressed, entered number: ");
+  // serial.println(enteredNumber);
    vTaskResume(Task1Handle);
   vTaskResume(Task2Handle);
   xTaskNotifyGive(SendDataTaskHandle); // Notify the SendDataTask to run
@@ -140,8 +140,10 @@ void b10PopCallback(void *ptr) {  // OK Button
 void b11PopCallback(void *ptr) { // Backspace
   if (enteredNumber.length() > 0) {
     enteredNumber.remove(enteredNumber.length() - 1);
-    Serial.print("Backspace pressed, new number: ");
-    Serial.println(enteredNumber);
+   vTaskSuspend(Task1Handle);
+  vTaskSuspend(Task2Handle);
+    // serial.print("Backspace pressed, new number: ");
+    // serial.println(enteredNumber);
   }
 }
 void b12PopCallback(void *ptr) { // Delete entered value
@@ -149,45 +151,44 @@ void b12PopCallback(void *ptr) { // Delete entered value
   t9.setText("");
    vTaskResume(Task1Handle);
   vTaskResume(Task2Handle);
-  Serial.println("Delete pressed, entered number cleared");
+  // serial.println("Delete pressed, entered number cleared");
 }
 void b13PopCallback(void *ptr) {
   enteredNumber += "/";
    vTaskSuspend(Task1Handle);
   vTaskSuspend(Task2Handle);
-  Serial.println("Backslash added");
+  // serial.println("Backslash added");
 }
 
 // Tare button callback function
 void b1_1PopCallback(void *ptr) {
-  Serial.println("Tare button pressed");
+  // serial.println("Tare button pressed");
   tare();
 }
 
 void b1PushCallback(void *ptr) {
-  Serial.println("Tare button pressed");
+  // serial.println("Tare button pressed");
   tare();
 }
 
-// Page change callback functions
-void page0ShowCallback(void *ptr) {
-  currentPage = 0;
-  Serial.println("Page 0 shown");
-}
-
-void page1ShowCallback(void *ptr) {
-  currentPage = 1;
-  Serial.println("Page 1 shown");
-}
-
-void page2ShowCallback(void *ptr) {
-  currentPage = 2;
-  Serial.println("Page 2 shown");
-}
+//// Page change callback functions
+//void page0ShowCallback(void *ptr) {
+//  currentPage = 0;
+//  // serial.println("Page 0 shown");
+//}
+//
+//void page1ShowCallback(void *ptr) {
+//  currentPage = 1;
+//  // serial.println("Page 1 shown");
+//}
+//
+//void page2ShowCallback(void *ptr) {
+//  currentPage = 2;
+//  // serial.println("Page 2 shown");
+//}
 
 NexTouch *nex_listen_list[] = {
-  &page0, &page1, &page2,
-  &b1_1, &b0, &b1, &b2, &b3, &b4, &b5, &b6, &b7, &b8, &b9, &b10, &b11, &b12,&b13,
+ &b1_1, &b0, &b1, &b2, &b3, &b4, &b5, &b6, &b7, &b8, &b9, &b10, &b11, &b12,&b13,
   NULL
 };  // Array of Nextion touch objects
 
@@ -216,15 +217,15 @@ String getFormattedDateTime() {
 void setup() {
   Serial.begin(9600);
   Serial2.begin(9600, SERIAL_8N1, 15, 17);  // RX pin 16, TX pin 17
-  Serial.println("Serial2 initialized");
+  // serial.println("Serial2 initialized");
 
   // Initialize Nextion display
   nexInit();
 
-  // Attach page change callbacks
-  page0.attachPush(page0ShowCallback);
-  page1.attachPush(page1ShowCallback);
-  page2.attachPush(page2ShowCallback);
+//  // Attach page change callbacks
+//  page0.attachPush(page0ShowCallback);
+//  page1.attachPush(page1ShowCallback);
+//  page2.attachPush(page2ShowCallback);
 
   // Attach tare button callback
   b1_1.attachPop(b1_1PopCallback);
@@ -260,12 +261,12 @@ void setup() {
   
 
   if (success == 0) {
-    Serial.println("Failed to connect");
+    // serial.println("Failed to connect");
     page_3();
   } else {
-    Serial.println("Connected");
+    // serial.println("Connected");
     page_0();
-     Serial.println("Device is in Station mode, navigating to page 5");
+     // serial.println("Device is in Station mode, navigating to page 5");
  
   }
 
@@ -277,10 +278,10 @@ void setup() {
 
 //  // Check if in Access Point mode or Station mode
 //  if (WiFi.getMode() == WIFI_MODE_AP) {
-//    Serial.println("Device is in Access Point mode, navigating to page 4");
+//    // serial.println("Device is in Access Point mode, navigating to page 4");
 //    page4.show(); // Assuming page4 is your AP mode page
 //  } else if (WiFi.getMode() == WIFI_MODE_STA) {
-//    Serial.println("Device is in Station mode, navigating to page 5");
+//    // serial.println("Device is in Station mode, navigating to page 5");
 //    page5.show(); // Assuming page5 is your Station mode page
 //  }
 
@@ -340,7 +341,7 @@ void Task1(void *pvParameters) {
   (void) pvParameters;
 
   // Initialize the scale
-  Serial.println("Initializing the scale");
+  // serial.println("Initializing the scale");
   scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
   scale.set_scale(1990);
   scale.tare();
@@ -349,11 +350,11 @@ void Task1(void *pvParameters) {
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
 
   while (1) {
-    Serial.println("Task 1 is running");
+    // serial.println("Task 1 is running");
     nexLoop(nex_listen_list);  // Check for any button presses on the Nextion display
     if (buttonPressed) {
       tare();
-      Serial.println("Button Pressed Tare");
+      // serial.println("Button Pressed Tare");
       buttonPressed = false;
     }
 
@@ -362,8 +363,8 @@ void Task1(void *pvParameters) {
     scale.power_up();
 
     double weight = scale.get_units(10); // Get weight in double floating point
-    Serial.print("Weight:\t");
-    Serial.println(weight, 0); // Print weight with 2 decimal places
+    // serial.print("Weight:\t");
+    // serial.println(weight, 0); // Print weight with 2 decimal places
     storedWeight=weight;
     if (xSemaphoreTake(lcdSemaphore, portMAX_DELAY)) {
       if (weight < 3.0) {
@@ -384,16 +385,16 @@ void Task2(void *pvParameters) {
 
   pinMode(2, OUTPUT); // Set pin 2 as an output
 
-  Serial.println("Task 2 is created"); // Debugging statement to check if Task 2 is created
+  // serial.println("Task 2 is created"); // Debugging statement to check if Task 2 is created
 
   while (1) {
     // Use ulTaskNotifyTake to wait until Task2 is notified to run
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    Serial.println("Task 2 is running"); // Debugging statement to check if Task 2 is running
+    // serial.println("Task 2 is running"); // Debugging statement to check if Task 2 is running
 
     if (Serial.available()) {
-      Serial.println("Serial data available"); // Debugging statement to check if serial data is available
+      // serial.println("Serial data available"); // Debugging statement to check if serial data is available
 
       // Set pin 2 high
       digitalWrite(2, HIGH);
@@ -406,7 +407,7 @@ void Task2(void *pvParameters) {
         delay(10);  // Give some time for all characters to arrive
       }
 
-      Serial.println("Received: " + newData); // Debugging print
+      // serial.println("Received: " + newData); // Debugging print
 
       // Ensure newData fits within the display line limit
       if (newData.length() > 20) {
@@ -437,10 +438,10 @@ void Task2(void *pvParameters) {
       }
 
       // Print the results
-      Serial.print("Length: ");
-      Serial.println(length);
-      Serial.print("Breadth: ");
-      Serial.println(breadth);
+      // serial.print("Length: ");
+      // serial.println(length);
+      // serial.print("Breadth: ");
+      // serial.println(breadth);
 
       if (xSemaphoreTake(lcdSemaphore, portMAX_DELAY)) {
         // Ensure the text is set only on the correct page
@@ -459,12 +460,12 @@ void EnterNumberTask(void * parameter) {
   while (true) {
     // Wait for notification from main loop
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    Serial.println("EnterNumberTask is running");
+    // serial.println("EnterNumberTask is running");
 
     // Store the current weight in storedWeight
     //storedWeight = scale.get_units(10);
-    Serial.print("Stored Weight: ");
-    Serial.println(storedWeight);
+    // serial.print("Stored Weight: ");
+    // serial.println(storedWeight);
 
     // Simulate some work by delaying
     vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -503,29 +504,29 @@ void SendDataTask(void * parameter) {
       String requestBody;
       serializeJson(doc, requestBody);
 
-      Serial.print("Sending JSON Payload: ");
-      Serial.println(requestBody); // Print the JSON payload
+      // serial.print("Sending JSON Payload: ");
+      // serial.println(requestBody); // Print the JSON payload
 
       int httpResponseCode = http.POST(requestBody);
 
       if (httpResponseCode > 0) {
         String response = http.getString();
-        Serial.println(httpResponseCode);
-        Serial.println(response);
+        // serial.println(httpResponseCode);
+        // serial.println(response);
         String message = "Success ID:" + String(enteredNumber);
          t9.setText(message.c_str());
           
 
       } else {
-        Serial.print("Error on sending POST: ");
-        Serial.println(httpResponseCode);
+        // serial.print("Error on sending POST: ");
+        // serial.println(httpResponseCode);
                 String message = "Fail ID " + String(enteredNumber);
          t9.setText(message.c_str());
       }
 
       http.end();
     } else {
-      Serial.println("WiFi Disconnected");
+      // serial.println("WiFi Disconnected");
     }
 
     enteredNumber = ""; // Reset entered number after sending
@@ -565,7 +566,7 @@ void page_0()
     Serial2.write(0xFF); // End of command
     Serial2.write(0xFF); // End of command
 
-    Serial.println("Switched to Page 0");
+    // serial.println("Switched to Page 0");
 }
 
 void page_3()
@@ -577,5 +578,5 @@ void page_3()
     Serial2.write(0xFF); // End of command
     Serial2.write(0xFF); // End of command
 
-    Serial.println("Switched to Page 3");
+    // serial.println("Switched to Page 3");
 }
