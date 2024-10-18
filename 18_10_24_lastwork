@@ -35,6 +35,9 @@ NexButton b11 = NexButton(2, 12, "b11"); // backspace
 NexButton b12 = NexButton(2, 14, "b13"); // DELETE
 NexButton b13 = NexButton(2, 13, "b12");  // backslash
 
+NexButton p1 = NexButton(1, 2, "b0");
+NexButton p2 = NexButton(2, 25, "b14");
+
 // NexPage objects for page change tracking
 //NexPage page0 = NexPage(0, 0, "page0");
 //NexPage page1 = NexPage(1, 0, "page1");
@@ -69,79 +72,72 @@ TaskHandle_t SendDataTaskHandle = NULL;
 
 SemaphoreHandle_t lcdSemaphore;
 
+
+//   vTaskSuspend(Task1Handle);
+//  vTaskSuspend(Task2Handle);
+
+//    vTaskResume(Task1Handle);
+ // vTaskResume(Task2Handle);
+
 // Callback functions for button press events
 void b0PopCallback(void *ptr) {
   enteredNumber += "1";
   // // serial.println("Button 1 pressed");
-   vTaskSuspend(Task1Handle);
-  vTaskSuspend(Task2Handle);
+
 }
 void b1PopCallback2(void *ptr) {
   enteredNumber += "2";
   // serial.println("Button 2 pressed");
-   vTaskSuspend(Task1Handle);
-  vTaskSuspend(Task2Handle);
+  
 }
 void b2PopCallback(void *ptr) {
   enteredNumber += "3";
-  // serial.println("Button 3 pressed");
-   vTaskSuspend(Task1Handle);
-  vTaskSuspend(Task2Handle);
+ 
 }
 void b3PopCallback(void *ptr) {
   enteredNumber += "4";
   // serial.println("Button 4 pressed");
-   vTaskSuspend(Task1Handle);
-  vTaskSuspend(Task2Handle);
+
 }
 void b4PopCallback(void *ptr) {
   enteredNumber += "5";
   // serial.println("Button 5 pressed");
-   vTaskSuspend(Task1Handle);
-  vTaskSuspend(Task2Handle);
+
 }
 void b5PopCallback(void *ptr) {
   enteredNumber += "6";
   // serial.println("Button 6 pressed");
-   vTaskSuspend(Task1Handle);
-  vTaskSuspend(Task2Handle);
+
 }
 void b6PopCallback(void *ptr) {
   enteredNumber += "7";
   // serial.println("Button 7 pressed");
-   vTaskSuspend(Task1Handle);
-  vTaskSuspend(Task2Handle);
+
 }
 void b7PopCallback(void *ptr) {
   enteredNumber += "8";
   // serial.println("Button 8 pressed");
-   vTaskSuspend(Task1Handle);
-  vTaskSuspend(Task2Handle);
+
 }
 void b8PopCallback(void *ptr) {
   enteredNumber += "9";
   // serial.println("Button 9 pressed");
-   vTaskSuspend(Task1Handle);
-  vTaskSuspend(Task2Handle);
+
 }
 void b9PopCallback(void *ptr) {
   enteredNumber += "0";
-  // serial.println("Button 0 pressed");
-   vTaskSuspend(Task1Handle);
-  vTaskSuspend(Task2Handle);
+
 }
 void b10PopCallback(void *ptr) {  // OK Button
   // serial.print("OK Button pressed, entered number: ");
   // serial.println(enteredNumber);
-   vTaskResume(Task1Handle);
-  vTaskResume(Task2Handle);
+
   xTaskNotifyGive(SendDataTaskHandle); // Notify the SendDataTask to run
 }
 void b11PopCallback(void *ptr) { // Backspace
   if (enteredNumber.length() > 0) {
     enteredNumber.remove(enteredNumber.length() - 1);
-   vTaskSuspend(Task1Handle);
-  vTaskSuspend(Task2Handle);
+
     // serial.print("Backspace pressed, new number: ");
     // serial.println(enteredNumber);
   }
@@ -149,14 +145,12 @@ void b11PopCallback(void *ptr) { // Backspace
 void b12PopCallback(void *ptr) { // Delete entered value
   enteredNumber = "";
   t9.setText("");
-   vTaskResume(Task1Handle);
-  vTaskResume(Task2Handle);
+
   // serial.println("Delete pressed, entered number cleared");
 }
 void b13PopCallback(void *ptr) {
   enteredNumber += "/";
-   vTaskSuspend(Task1Handle);
-  vTaskSuspend(Task2Handle);
+
   // serial.println("Backslash added");
 }
 
@@ -171,24 +165,25 @@ void b1PushCallback(void *ptr) {
   tare();
 }
 
-//// Page change callback functions
-//void page0ShowCallback(void *ptr) {
-//  currentPage = 0;
-//  // serial.println("Page 0 shown");
-//}
-//
-//void page1ShowCallback(void *ptr) {
-//  currentPage = 1;
-//  // serial.println("Page 1 shown");
-//}
-//
-//void page2ShowCallback(void *ptr) {
-//  currentPage = 2;
-//  // serial.println("Page 2 shown");
-//}
+void p1PopCallback(void *ptr) { 
+     vTaskSuspend(Task1Handle);
+     vTaskSuspend(Task2Handle);
+     Serial.println("Task 1 & Task 2 is suspended");
+  
+  
+  }
+void p2PopCallback(void *ptr) { 
+
+    vTaskResume(Task1Handle);
+    vTaskResume(Task2Handle);
+    Serial.println("Task 1 & Task 2 is Resume");
+ 
+ }
+
+
 
 NexTouch *nex_listen_list[] = {
- &b1_1, &b0, &b1, &b2, &b3, &b4, &b5, &b6, &b7, &b8, &b9, &b10, &b11, &b12,&b13,
+ &b1_1, &b0, &b1, &b2, &b3, &b4, &b5, &b6, &b7, &b8, &b9, &b10, &b11, &b12,&b13,&p1,&p2,
   NULL
 };  // Array of Nextion touch objects
 
@@ -222,10 +217,7 @@ void setup() {
   // Initialize Nextion display
   nexInit();
 
-//  // Attach page change callbacks
-//  page0.attachPush(page0ShowCallback);
-//  page1.attachPush(page1ShowCallback);
-//  page2.attachPush(page2ShowCallback);
+
 
   // Attach tare button callback
   b1_1.attachPop(b1_1PopCallback);
@@ -245,7 +237,9 @@ void setup() {
   b11.attachPop(b11PopCallback);
   b12.attachPop(b12PopCallback);
   b13.attachPop(b13PopCallback);
-
+  p1.attachPop(p1PopCallback);
+  p2.attachPop(p2PopCallback);
+  
   lcdSemaphore = xSemaphoreCreateMutex();
 
   // WiFi Manager Accesspoint and station mode
@@ -270,20 +264,7 @@ void setup() {
  
   }
 
-//  bool success = manager.autoConnect("Config Egg Module");
 
-  
-
-
-
-//  // Check if in Access Point mode or Station mode
-//  if (WiFi.getMode() == WIFI_MODE_AP) {
-//    // serial.println("Device is in Access Point mode, navigating to page 4");
-//    page4.show(); // Assuming page4 is your AP mode page
-//  } else if (WiFi.getMode() == WIFI_MODE_STA) {
-//    // serial.println("Device is in Station mode, navigating to page 5");
-//    page5.show(); // Assuming page5 is your Station mode page
-//  }
 
   // Initialize NTP client
   timeClient.begin();
@@ -305,7 +286,7 @@ void setup() {
     "Task2",
     10000,  // Increased stack size
     NULL,
-    2,
+    3,
     &Task2Handle,
     1 // Run on core 1
   );
@@ -315,7 +296,7 @@ void setup() {
     "EnterNumberTask",  // Name of the task
     8000,               // Increased stack size
     NULL,               // Task input parameter
-    1,                  // Priority of the task
+    2,                  // Priority of the task
     &EnterNumberTaskHandle, // Task handle
     0);                 // Core to run the task
 
@@ -324,7 +305,7 @@ void setup() {
     "SendDataTask",     // Name of the task
     8000,               // Increased stack size
     NULL,               // Task input parameter
-    1,                  // Priority of the task
+    2,                  // Priority of the task
     &SendDataTaskHandle,// Task handle
     1);                 // Core to run the task
 
